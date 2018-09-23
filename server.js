@@ -2,7 +2,21 @@
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const port = 8124;
+
+const DEFINE_ACK 	= 'ACK';
+const DEFINE_DEC 	= 'DEC';
+const DEFINE_QA  	= 'QA';
+const DEFINE_FILES 	= 'FILES';
+const DEFINE_REMOTE = 'REMOTE';
+const DEFINE_COPY 	= 'COPY';
+const DEFINE_NEXT	= 'NEXT';
+const DEFINE_DECODE = 'DECODE';
+const DEFINE_ENCODE = 'ENCODE';
+const DEFINE_CLOSE	= 'close';
+const DEFINE_CRYPTO_METHOD = 'rc4-hmac-md5';
+
 let seed = 0;
 let targ = 0;
 let ARRQ = require('./qa.json');
@@ -30,20 +44,20 @@ const server = net.createServer((client) => {
 	log.write(`[${formatDate()}]: Client #${client.id} connected\n`);
 
 	client.on('data', (data) => {
-		if ((data === 'FILES') || (data === 'QA')) {
-			if (data === 'FILES') {
+		if ((data === DEFINE_REMOTE) || (data === DEFINE_FILES) || (data === DEFINE_QA)) {
+			if (data === DEFINE_FILES) {
 				FILES[client.id] = [];
                 fs.mkdir(DEFAULT_DIR + path.sep + client.id, () => {});
 			}
 			CLIENTS[client.id] = data;
-			client.write('ACK');
+			client.write(DEFINE_ACK);
 		}	
         else if (client.id === undefined) {
-            client.write('DEC');
+            client.write(DEFINE_DEC);
             client.destroy();
         }
 
-        if ((CLIENTS[client.id] === 'QA') && (data !== 'QA')) {     	
+        if ((CLIENTS[client.id] === DEFINE_QA) && (data !== DEFINE_QA)) {     	
 		    let answr = 'Bad answer';
 		    if (Math.floor(Math.random() * 2) === 1) {
 		    	let QID = -1;
@@ -56,7 +70,7 @@ const server = net.createServer((client) => {
 		    }
         	log.write(`[${formatDate()}][#${client.id}] > Data: ${data}; Answer: ${answr}\n`);
 	        client.write(answr);	
-	    } else if (CLIENTS[client.id] === 'FILES' && data !== 'FILES') {
+	    } else if (CLIENTS[client.id] === DEFINE_FILES && data !== DEFINE_FILES) {
             FILES[client.id].push(data);
             if (++targ === 2) {
                 let buf = Buffer.from(FILES[client.id][0], 'hex');
@@ -67,8 +81,18 @@ const server = net.createServer((client) => {
                 targ = 0;
                 FILES[client.id] = [];
                 fr.close();
-                client.write('NEXT');
+                client.write(DEFINE_NEXT);
             }
+        } else if (CLIENTS[client.id] === DEFINE_REMOTE && data !== DEFINE_REMOTE) {
+            console.log(data);
+            let splt = data.split(' ');
+            let RS = fs.createReadStream(splt[1]);
+            let WS = fs.createWriteStream(splt[2]);
+            if (splt[0] === DEFINE_COPY) RS.pipe(WS).on(DEFINE_CLOSE, () => client.write(DEFINE_ACK));
+            else if (splt[0] === DEFINE_ENCODE) 
+            	RS.pipe(crypto.createCipher(DEFINE_CRYPTO_METHOD, splt[3])).pipe(WS).on(DEFINE_CLOSE, () => client.write(DEFINE_ACK));
+            else if (splt[0] === DEFINE_DECODE) 
+            	RS.pipe(crypto.createDecipher(DEFINE_CRYPTO_METHOD, splt[3])).pipe(WS).on(DEFINE_CLOSE, () => client.write(DEFINE_ACK));
         }
 	});
 
@@ -83,6 +107,4 @@ server.listen(port, () => {
 	console.log(`Server listening on localhost:${port}`);
 });
 
-function formatDate() {
-	return new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
-}
+function formatDate() { return new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''); }
