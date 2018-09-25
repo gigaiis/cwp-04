@@ -25,6 +25,8 @@ function LOAD_ALL_FILES(dir) {
     });
 }
 
+client.connect(port, () => { client.write('FILES'); });
+
 client.on('data', (data) => {
     console.log(`> ${data}`);
     if ((data === 'DEC') || (ARRFILES.length === 0)) client.destroy();
@@ -32,8 +34,9 @@ client.on('data', (data) => {
         let F = ARRFILES.pop();
         fs.readFile(F, (err, data) => {
             let buf = data.toString('hex');
-            client.write(buf);
-            client.write(path.basename(F));
+			// console.log('buf = ' + buf);
+			// console.log('basename = ' + path.basename(F));
+            client.write(buf + '₿' + path.basename(F));
         }); 
     } else console.log(`!!! UNKNOWN COMMAND: ${data}`);
 });
@@ -41,5 +44,3 @@ client.on('data', (data) => {
 client.on('close', function () {
     console.log('Connection closed');
 });
-
-client.connect(port, () => { client.write('FILES'); });
